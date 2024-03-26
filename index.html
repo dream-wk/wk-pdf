@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF加水印工具</title>
+  <!-- Include pdf-lib library -->
+  <script src="./pdf-lib.min.js"></script>
+  <script src="fontData.js"></script>
+  <!-- Include fontkit library -->
+  <script src="./fontkit.umd.min.js"></script>
+  <style>
+    .con{
+      display: flex;
+    flex-direction: column;
+    align-items: center
+    
+    }
+    #pdfViewer {
+      display: none;
+    }
+
+    .loader {
+      display: none;
+    }
+
+    .loader .loading_box {
+      position: fixed;
+      min-width: 500px;
+      height: 300px;
+      padding: 50px;
+      /* border: 2px solid #9febe0; */
+      /* border-radius: 100px; */
+      background: #34495d;
+      /* box-shadow: 5px 5px 50px 15px rgba(0, 255, 235, 0.3); */
+    }
+
+    .loader .loading_box .symbol {
+      text-align: center;
+    }
+
+    .loader .loading_box .symbol p {
+      font-size: 1.5em;
+      font-weight: bold;
+      color: #fff;
+      margin: 30px 0;
+    }
+
+    .loader .loading_box .symbol div {
+
+      width: 50px;
+      height: 50px;
+      margin: 0px auto;
+      border-radius: 50%;
+      border-top: 5px solid #fff;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+
+
+      background: rgba(255, 255, 255, 0);
+
+
+      animation-name: rotate;
+      animation-duration: 1s;
+      animation-iteration-count: infinite;
+    }
+
+    @keyframes rotate {
+      0% {
+
+        transform: rotate(0deg);
+      }
+
+      100% {
+
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="con">
+    <h1>PDF水印工具</h1>
+    <div>
+      <input type="file" id="pdfInput" accept=".pdf">
+      <br><br>
+      <!-- <label for="watermarkText">水印内容:</label> -->
+      水印内容：<input type="text" id="watermarkInput">
+      <br><br>
+      <!-- <label for="watermarkCount">水印个数:</label> -->
+      水印个数：<input type="number" id="watermarkCount" min="1">
+      <br><br>
+      <!-- <label for="fontSize">字体大小:</label> -->
+      字体大小：<input type="number" id="fontSize" min="1" value="22">
+      <!-- <label for="fontColor">字体颜色:</label> -->
+      字体颜色：<input type="color" id="fontColor" value="#000000"><br><br>
+
+      <!-- <label for="opacity">透明度 (0-1):</label> -->
+      透&nbsp;明&nbsp;度 ：<input type="number" id="opacity" step="0.01" min="0" max="1" value="0.4">（0~1）
+      <br><br>
+      <!-- <label for="rotationAngle">倾斜角度:</label> -->
+      倾斜角度：<input type="number" id="rotationAngle" step="1" value="-45"><br><br>
+      <button style="margin-bottom: 10px;" onclick="generateWatermark()">点击生成</button>
+      <section class="loader" id="loading">
+        <h1></h1>
+        <div class="loading_box">
+          <div class="symbol">
+            <p>生成中...</p>
+            <div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <iframe id="pdfViewer" width="100%" height="800"></iframe>
+  </div>
+  <script>
+    function hexToRgb(hex) {
+
+      
+      hex = hex.replace(/^#/, '');
+
+      const bigint = parseInt(hex, 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+
+      return { r, g, b };
+    }
+    async function generateWatermark() {
+      const pdfInput = document.getElementById('pdfInput');
+      const watermarkInput = document.getElementById('watermarkInput');
+      const watermarkCount = parseInt(document.getElementById('watermarkCount').value, 10);
+      const fontColor = document.getElementById('fontColor').value;
+      const opacity = parseFloat(document.getElementById('opacity').value);
+      const rotationAngle = parseInt(document.getElementById('rotationAngle').value, 10);
+      const fontSize = parseInt(document.getElementById('fontSize').value, 10);
+      const loadingElement = document.getElementById('loading')
+      const pdfViewer = document.getElementById('pdfViewer');
+      // const fontUrl = './DENG.TTF'
+      if (pdfInput.files.length > 0 ) {
+        const pdfFile = pdfInput.files[0];
+        const watermarkText = watermarkInput.value||'';
+        loadingElement.style.display = 'block';
+        pdfViewer.style.display = 'none';
+        
+        const arrayBuffer = await pdfFile.arrayBuffer();
+        const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+        const paramsObj = {
+          watermarkCount,
+          fontColor: hexToRgb(fontColor),
+          opacity,
+          rotationAngle,
+          fontSize
+        }
+        pdfDoc.registerFontkit(fontkit)
+        // const fontBuffer = await fetch(fontUrl).then(res => res.arrayBuffer())
+        // const customFont = await pdfDoc.embedFont(fontBuffer)
+        const fontBuffer = Uint8Array.from(atob(base64FontData), c => c.charCodeAt(0));
+        const customFont = await pdfDoc.embedFont(fontBuffer)
+        pdfDoc.getPages().forEach(page => {
+          addWatermarkToPage(page, watermarkText, paramsObj, customFont);
+        });
+
+        const modifiedArrayBuffer = await pdfDoc.save();
+        const blob = new Blob([modifiedArrayBuffer], { type: 'application/pdf' });
+        pdfViewer.src = URL.createObjectURL(blob);
+        pdfViewer.style.display = 'block';
+        pdfViewer.onload = function () {
+          loadingElement.style.display = 'none';
+        };
+        // Create a download link
+        // const downloadLink = document.createElement('a');
+        // downloadLink.href = URL.createObjectURL(blob);
+        // downloadLink.download = 'watermarked.pdf';
+        // document.body.appendChild(downloadLink);
+        // downloadLink.click();
+        // document.body.removeChild(downloadLink);
+      } else {
+        alert('Please select a PDF file.');
+      }
+    }
+
+    function addWatermarkToPage(page, text, paramsObj, customFont) {
+      const { width, height } = page.getSize();
+      const size = 22;
+      const positionArray = []
+      for (let index = 0; index < paramsObj.watermarkCount; index++) {
+        if (index === 0) {
+          positionArray.push({ x: 1 / 4, y: 1 })
+          continue
+        }
+        if (index % 2 === 0) {
+          positionArray.push({ x: 1 / 4, y: (paramsObj.watermarkCount - index) / paramsObj.watermarkCount })
+        } else {
+          positionArray.push({ x: 3 / 4, y: (paramsObj.watermarkCount - index) / paramsObj.watermarkCount })
+        }
+      }
+
+      positionArray.forEach((item) => {
+        page.drawText(text, {
+          x: item.x * width,
+          y: item.y * height,
+          size: paramsObj.fontSize,
+          font: customFont, // 用自己注入的字体
+          // 颜色
+          color: PDFLib.rgb(paramsObj.fontColor.r/255, paramsObj.fontColor.g/255, 
+          paramsObj.fontColor.b/255),
+          // 倾斜角度
+          rotate: PDFLib.degrees(paramsObj.rotationAngle),
+          // 透明度
+          opacity: paramsObj.opacity
+        });
+      })
+
+
+    }
+  </script>
+
+
+</body>
+
+</html>
